@@ -12,7 +12,7 @@ N = 100000
 step = 1
 Lvec = 5
 Lsig = 10
-randscaling = 1
+randscaling = 0.01
 
 rn = np.random.randn(N, 1) * randscaling
 rno = np.zeros(rn.shape)
@@ -84,11 +84,14 @@ def concatnplist(nplist):
 newsig = np.zeros(rn.shape)
 newsigc = np.zeros(rn.shape)
 spaces = np.array(range(1,2))
-for rstep in spaces:
-    print("Calculating spacing %d" % rstep)
+
+# for rstep in spaces:
+#     print("Calculating spacing %d" % rstep)
+
+rstep = 1
+def computeranks(rn, pkeys, rstep, psi, perms, permn, ):
     perms, permn = rankdata(rn, pkeys, rankstep=rstep)
     psi = permn.argsort()[::-1]
-    print(perms[pkeys[psi[0]]][0:3])
     permncumsum = permn[psi].cumsum()
     ind = np.argmax(permncumsum > sum(permn)*0.05)  # Find top 10%
     newsigall = np.zeros([N,1])
@@ -96,7 +99,7 @@ for rstep in spaces:
     outind = 0
     clim = 0.9
     sigtemp = list()
-    for pi in psi[0:10]:
+    for pi in psi[0:1]:
         newsig, sig = reconstructsignal(rn, perms, pkeys, pi, rstep)
         # find correlation coef and decide whether to keep this measure.
         c = np.cov(newsig[np.isnan(newsig) == False],
@@ -104,7 +107,7 @@ for rstep in spaces:
         print(c[0,1])
         # if c[0,1] > clim:
         newsig[np.isnan(newsig)] = 0
-        sigtemp.append(newsig*c[0,1])
+        sigtemp.append(newsig)
     # while len(newsiglist) > 0:
 
     newsigc = np.nanmean(concatnplist(sigtemp), 0)
@@ -113,13 +116,17 @@ for rstep in spaces:
 
 plt.interactive(False)
 plt.close("all")
-f, ax = plt.subplots(2, figsize=(20, 20))
-ax[0].plot(zscore(newsigc))
-ax[0].plot(zscore(rno),'r--')
+f, ax = plt.subplots(3, figsize=(20, 20))
+ax[0].plot(newsigc)
+ax[0].plot(rno,'r--')
 ax[0].set_xlim(0, 1000)
 
 # ax = plt.subplots()
 ax[1].plot(sig.transpose())
+
+ax[2].plot(rn)
+ax[2].set_xlim(0, 1000)
+
 plt.show()
 
 # ax = plt.subplots()
