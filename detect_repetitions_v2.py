@@ -8,19 +8,18 @@ import matplotlib.pyplot as plt
 from itertools import permutations
 from scipy.stats import zscore
 
-N = 100000
+N = 1000000
 step = 1
 Lvec = 5
 Lsig = 10
-randscaling = 0.01
+randscaling = 0.5
 
-rn = np.random.randn(N, 1) * randscaling
-rno = np.zeros(rn.shape)
-z = np.zeros([Lvec, 1])
+rn = np.random.randn(N) * randscaling
+rno = np.zeros(N)
 
-z = np.sin(np.linspace(-np.pi + 0.01, np.pi + 0.01, Lsig))
+z = np.sin(np.linspace(-np.pi + 0.4, np.pi + 0.4, Lsig)) # shift signal by 45 deg
 for i in range(0, N, 50):
-    rno[i:i + Lsig, 0] = z
+    rno[i:i + Lsig] = z
 
 rn = rn + rno
 
@@ -40,7 +39,7 @@ def rankdata(data, pkeys, rankstep=1):
         if i == 16:
             print("debug")
         ranks = data[i:i + 5 * step:step].transpose().argsort()
-        a = ''.join(map(str, ranks[0]))
+        a = ''.join(map(str, ranks))
         perms[a].append(i)
 
     permn = []
@@ -66,14 +65,6 @@ def generatesigmean(permind):
     return sigmean
 
 
-def reconstructsignal(rn, perms, pkeys, permind, step):
-    rs = np.zeros(rn.shape)  # reconstructed signal
-    sigmean = generatesigmean(permind)
-    for pi in perms[pkeys[permind]]:
-        rs[pi:pi + Lvec:step, 0] = sigmean
-    return rs, sigmean
-
-
 def concatnplist(nplist):
     nout = np.zeros([len(nplist), N])
     for ii in range(0,len(nplist)):
@@ -81,17 +72,19 @@ def concatnplist(nplist):
     return nout
 
 
-newsig = np.zeros(rn.shape)
+plt.interactive(False)
+plt.close("all")
+
+rnn = np.copy(rn)
+
 newsigc = np.zeros(rn.shape)
 spaces = np.array(range(1,2))
-
-# for rstep in spaces:
-#     print("Calculating spacing %d" % rstep)
-
-rstep = 1
-def computeranks(rn, pkeys, rstep, psi, perms, permn, ):
-    perms, permn = rankdata(rn, pkeys, rankstep=rstep)
+rstep = [1, 2]
+for ri in range(0,1):
+    print("Calculating spacing %d" % rstep[0])
+    perms, permn = rankdata(rn, pkeys, rankstep=rstep[0])
     psi = permn.argsort()[::-1]
+    print(perms[pkeys[psi[0]]][0:3])
     permncumsum = permn[psi].cumsum()
     ind = np.argmax(permncumsum > sum(permn)*0.05)  # Find top 10%
     newsigall = np.zeros([N,1])
@@ -99,33 +92,37 @@ def computeranks(rn, pkeys, rstep, psi, perms, permn, ):
     outind = 0
     clim = 0.9
     sigtemp = list()
-    for pi in psi[0:1]:
-        newsig, sig = reconstructsignal(rn, perms, pkeys, pi, rstep)
-        # find correlation coef and decide whether to keep this measure.
-        c = np.cov(newsig[np.isnan(newsig) == False],
-                    rn[np.isnan(newsig) == False].T)
-        print(c[0,1])
-        # if c[0,1] > clim:
-        newsig[np.isnan(newsig)] = 0
-        sigtemp.append(newsig)
-    # while len(newsiglist) > 0:
+    permsfit = {k:[] for k in pkeys}
+    newsig = np.zeros(rn.shape)
+    for pi in psi[0:1]: # choose the vector with most occurences
+        sig = generatesigmean(pi)
+        # for each instance of vector (ppi is the index in rn)
+        for ppi in perms[pkeys[pi]]:
+            permsfit[pkeys[pi]].append(
+                np.polyfit(sig.flatten(), rn[ppi:ppi + Lvec:step], 1))
 
-    newsigc = np.nanmean(concatnplist(sigtemp), 0)
-    newsigc[np.isnan(newsigc)] = 0
+        for pfi in range(0, len(perms[pkeys[pi]])):
+            ppi = perms[pkeys[pi]][pfi]
+            ysig = sig * permsfit[pkeys[pi]][pfi][0] + permsfit[pkeys[pi]][pfi][1]
+            newsig[ppi:ppi + Lvec:step] += ysig.flatten()  # changed this from += to =
+    rn -= newsig
 
+    plt.figure(ri)
+    f, ax = plt.subplots(3, figsize=(20, 20))
+    ax[0].plot(newsig)
+    ax[0].plot(rno,'r--')
+    ax[0].set_xlim(0, 1000)
+    ax[0].set_ylim(-1.5, 1.5)
 
-plt.interactive(False)
-plt.close("all")
-f, ax = plt.subplots(3, figsize=(20, 20))
-ax[0].plot(newsigc)
-ax[0].plot(rno,'r--')
-ax[0].set_xlim(0, 1000)
+    # ax = plt.subplots()
+    ax[1].plot(sig.transpose())
 
-# ax = plt.subplots()
-ax[1].plot(sig.transpose())
-
-ax[2].plot(rn)
-ax[2].set_xlim(0, 1000)
+    ax[2].plot(rnn, 'b')
+    ax[2].plot(rn,'r--')
+    ax[2].plot(newsig,'g')
+    ax[2].plot(rno,'m--')
+    ax[2].set_xlim(0, 1000)
+# end for
 
 plt.show()
 
