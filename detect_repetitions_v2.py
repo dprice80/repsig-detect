@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 
-# import scipy as sp
 import numpy as np
-# from scipy import signal
 import matplotlib.pyplot as plt
-# from scipy.special import comb
 from itertools import permutations
-from scipy.stats import zscore
 
-N = 1000000
+
+N = 100000
 step = 1
 Lvec = 5
-Lsig = 10
-randscaling = 0.5
+Lsig = 15
+randscaling = 0.1
 
 rn = np.random.randn(N) * randscaling
 rno = np.zeros(N)
@@ -32,13 +29,11 @@ for t in l:
 
 
 # define ranking function
-def rankdata(data, pkeys, rankstep=1):
+def rankdata(data, pkeys, rstep=1):
     Ns = len(data)
     perms = {pk: [] for pk in pkeys}
-    for i in range(0, Ns - 5 * step):
-        if i == 16:
-            print("debug")
-        ranks = data[i:i + 5 * step:step].transpose().argsort()
+    for i in range(0, Ns - Lvec * rstep):
+        ranks = data[i:i + Lvec * rstep:rstep].transpose().argsort()
         a = ''.join(map(str, ranks))
         perms[a].append(i)
 
@@ -56,12 +51,15 @@ def find(a):
 
 # find average of component
 # for each permutation of rank
-def generatesigmean(permind):
+def generatesigmean(permind, rstep):
     # check if instance has more than N repetitions
-    sigmean = np.zeros([1, Lvec])
+    sigmean = np.zeros(Lvec)
     ls = len(perms[pkeys[permind]])
+    L = len(rn)
     for ii in perms[pkeys[permind]]:
-        sigmean = sigmean + rn[ii:ii + Lvec].transpose() / ls
+        ind = range(ii, ii+(Lvec*rstep),rstep)
+        if ind[-1] <= len(rn):
+            sigmean = sigmean + rn[ind] / ls
     return sigmean
 
 
@@ -72,57 +70,97 @@ def concatnplist(nplist):
     return nout
 
 
+def sampentropy(U, m, r):
+    def _maxdist(x_i, x_j):
+        result = max([abs(ua - va) for ua, va in zip(x_i, x_j)])
+        return result
+
+    def _phi(m):
+        x = [[U[j] for j in range(i, i + m - 1 + 1)] for i in range(N - m + 1)]
+        C = [len([1 for j in range(len(x)) if i != j and _maxdist(x[i], x[j]) <= r]) for i in range(len(x))]
+        return sum(C)
+
+    N = len(U)
+
+    return -np.log(_phi(m + 1) / _phi(m))
+
+
 plt.interactive(False)
 plt.close("all")
 
 rnn = np.copy(rn)
 
 newsigc = np.zeros(rn.shape)
-spaces = np.array(range(1,2))
-rstep = [1, 2]
-for ri in range(0,1):
-    print("Calculating spacing %d" % rstep[0])
-    perms, permn = rankdata(rn, pkeys, rankstep=rstep[0])
-    psi = permn.argsort()[::-1]
-    print(perms[pkeys[psi[0]]][0:3])
-    permncumsum = permn[psi].cumsum()
-    ind = np.argmax(permncumsum > sum(permn)*0.05)  # Find top 10%
-    newsigall = np.zeros([N,1])
-    newsigall[:] = np.nan
-    outind = 0
-    clim = 0.9
-    sigtemp = list()
-    permsfit = {k:[] for k in pkeys}
-    newsig = np.zeros(rn.shape)
-    for pi in psi[0:1]: # choose the vector with most occurences
-        sig = generatesigmean(pi)
-        # for each instance of vector (ppi is the index in rn)
-        for ppi in perms[pkeys[pi]]:
-            permsfit[pkeys[pi]].append(
-                np.polyfit(sig.flatten(), rn[ppi:ppi + Lvec:step], 1))
+rstep = list(range(1,6,1))[::-1]
+sampen = [1e6]
+sampendiff = 1
+ri = 0
 
+while sampendiff > 0.005 or sampendiff < 0:
+    rsi = np.mod(ri,5)
+    newsigall = []
+    newsigcall = []
+    for rsi in range(len(rstep)):
+        rncand = np.copy(rn)  # candidate rn
+        newsigccand = np.copy(newsigc)
+        print("Calculating spacing %d" % rstep[rsi])
+        perms, permn = rankdata(rn, pkeys, rstep=rstep[rsi])
+        psi = permn.argsort()[::-1]
+        permncumsum = permn[psi].cumsum()
+        sigtemp = list()
+        permsfit = {k: [] for k in pkeys}
+        newsig = np.zeros(rn.shape)
+        pi = psi[0] # choose the vector with most occurences
+        sig = generatesigmean(pi, rstep[rsi])
+        # For each instance of vector (ppi is the index in rn)
+
+        # calculate polyfit for each location
+        for ppi in perms[pkeys[pi]]:
+            rind = range(ppi, ppi + Lvec * rstep[rsi], rstep[rsi])
+            permsfit[pkeys[pi]].append(
+                np.polyfit(sig.flatten(), rn[rind], 1))
+
+        # calculate regression at each location of chosen motif
         for pfi in range(0, len(perms[pkeys[pi]])):
             ppi = perms[pkeys[pi]][pfi]
+            rind = range(ppi, ppi + Lvec * rstep[rsi], rstep[rsi])
             ysig = sig * permsfit[pkeys[pi]][pfi][0] + permsfit[pkeys[pi]][pfi][1]
-            newsig[ppi:ppi + Lvec:step] += ysig.flatten()  # changed this from += to =
-    rn -= newsig
+            newsig[rind] += ysig.flatten()
+
+        # Delete extracted components from original source timeseries
+        rncand -= newsig # candidate rn
+        newsigccand += newsig # clean signal
+        newsigall.append(rncand) # save all condidate signals
+        newsigcall.append(newsigccand) # save clean signal candidates
+
+    v = []
+    for rsi in range(len(rstep)):
+        v.append(np.var(newsigall[rsi]))
+
+    rn = newsigall[find(v == min(v))[0]]
+    newsigc = newsigcall[find(v == min(v))[0]]
 
     plt.figure(ri)
-    f, ax = plt.subplots(3, figsize=(20, 20))
-    ax[0].plot(newsig)
-    ax[0].plot(rno,'r--')
+    f, ax = plt.subplots(3, 1, figsize=(20, 20))
+    ax[0].plot(newsigc)
+    ax[0].plot(rno, 'r--')
     ax[0].set_xlim(0, 1000)
     ax[0].set_ylim(-1.5, 1.5)
 
-    # ax = plt.subplots()
-    ax[1].plot(sig.transpose())
+    ax[1].plot(sig.T)
 
     ax[2].plot(rnn, 'b')
-    ax[2].plot(rn,'r--')
-    ax[2].plot(newsig,'g')
-    ax[2].plot(rno,'m--')
+    ax[2].plot(rn, 'r--')
     ax[2].set_xlim(0, 1000)
+
+    # sampen.append(sampentropy(rn[1:100], 2, 0.2 * np.std(rn)))
+    sampen.append(np.var(rn))
+    sampendiff = sampen[-2] - sampen[-1]
+    print("Variance: Run %d = %f, permn=%d" % (ri, sampen[ri], permn[pi]))
+    ri += 1
+
 # end for
+
 
 plt.show()
 
@@ -131,7 +169,7 @@ plt.show()
 
 # ax = plt.subplots()
 # plt.plot(sigmean)
-##plt.plot(z)
+# plt.plot(z)
 
 
 
