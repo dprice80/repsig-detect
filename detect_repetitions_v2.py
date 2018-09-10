@@ -3,20 +3,48 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import permutations
+import scipy.io as io
+from scipy import signal
 
+# io.loadmat("")
 
-N = 100000
+N = 10000
 step = 1
 Lvec = 5
-Lsig = 15
-randscaling = 0.1
+Lsig = 30
+randscaling = 0.3
 
 rn = np.random.randn(N) * randscaling
 rno = np.zeros(N)
 
 z = np.sin(np.linspace(-np.pi + 0.4, np.pi + 0.4, Lsig)) # shift signal by 45 deg
+
 for i in range(0, N, 50):
     rno[i:i + Lsig] = z
+
+f1 = 1/np.linspace(0, 100, len(rn)+1)[1:] \
+     * np.exp(-1j * 2 * np.pi * np.random.rand(len(rn)))
+f1[int(len(rn)/2)+1:] = 0
+rno = np.fft.ifft(f1).real
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = signal.butter(order, [low, high], btype='band')
+    return b, a
+
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = signal.lfilter(b, a, data)
+    return y
+
+rn = butter_bandpass_filter(rn, 10, 100, 1000, 5).real
+
+
+# plt.plot(f1)
+# plt.show()
 
 rn = rn + rno
 
@@ -91,12 +119,12 @@ plt.close("all")
 rnn = np.copy(rn)
 
 newsigc = np.zeros(rn.shape)
-rstep = list(range(1,6,1))[::-1]
+rstep = 2**np.array(range(0,7,1))
 sampen = [1e6]
 sampendiff = 1
 ri = 0
 
-while sampendiff > 0.005 or sampendiff < 0:
+while sampendiff > 0.05:
     rsi = np.mod(ri,5)
     newsigall = []
     newsigcall = []
@@ -144,18 +172,19 @@ while sampendiff > 0.005 or sampendiff < 0:
     f, ax = plt.subplots(3, 1, figsize=(20, 20))
     ax[0].plot(newsigc)
     ax[0].plot(rno, 'r--')
-    ax[0].set_xlim(0, 1000)
+    ax[0].plot(rnn, 'g--')
+    ax[0].set_xlim(0, 300)
     ax[0].set_ylim(-1.5, 1.5)
 
     ax[1].plot(sig.T)
 
     ax[2].plot(rnn, 'b')
     ax[2].plot(rn, 'r--')
-    ax[2].set_xlim(0, 1000)
+    ax[2].set_xlim(0, 300)
 
     # sampen.append(sampentropy(rn[1:100], 2, 0.2 * np.std(rn)))
     sampen.append(np.var(rn))
-    sampendiff = sampen[-2] - sampen[-1]
+    sampendiff = (sampen[-2] - sampen[-1]) / sampen[-2]
     print("Variance: Run %d = %f, permn=%d" % (ri, sampen[ri], permn[pi]))
     ri += 1
 
