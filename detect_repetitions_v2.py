@@ -16,10 +16,11 @@ import entropydecomp as ed
 # io.loadmat("")
 
 N = 10000
+
 step = 1
 Lvec = 5
 Lsig = 15
-randscaling = 0.1
+randscaling = 0.5
 
 rn = np.random.randn(N) * randscaling
 rn_noise = np.copy(rn)
@@ -27,8 +28,10 @@ rno = np.zeros(N)
 
 z = np.sin(np.linspace(-np.pi + 0.4, np.pi + 0.4, Lsig)) # shift signal by 45 deg
 
+
 for i in range(0, N, 50):
     rno[i:i + Lsig] = z
+    rn[i:i + Lsig] += z
 
 # f1 = 1/np.linspace(0, 100, len(rn)+1)[1:] \
 #      * np.exp(-1j * 2 * np.pi * np.random.rand(len(rn)))
@@ -39,7 +42,7 @@ for i in range(0, N, 50):
 # plt.plot(f1)
 # plt.show()
 
-rn = rn + rno
+# rn = rn + rno
 
 l = list(permutations(range(0, Lvec)))
 # print(l)
@@ -55,7 +58,7 @@ plt.close("all")
 rnn = np.copy(rn)
 
 
-rstep = 2**np.array(range(0, 7, 1))
+rstep = 2**np.array(range(0, 4, 1))
 # rstep = np.array(range(1, 8, 1))
 
 sampen = [1e6]
@@ -64,43 +67,34 @@ ri = 0
 
 newsig = np.zeros(rn.shape)
 
-for ii in range(10):
+for ii in range(30):
     ri += 1
     # run through all rstep and find best spacing for next component
-    rn, newsigc, sp, perms, permn = ed.rankdata_multi(rn, pkeys, rstep, Lvec)
+    rn, newsigc, sp, perms, permn, enlog = ed.rankdata_multi(rn, pkeys, rstep, Lvec)
     newsig += newsigc
 
     plt.figure(ri)
     f, ax = plt.subplots(3, 1, figsize=(20, 20))
-    ax[0].plot(newsig)
+    ax[0].plot(newsig, 'b', linewidth=2)
     ax[0].plot(rno, 'r--')
-    ax[0].plot(rnn, 'g--')
+    # ax[0].plot(rnn, 'g--')
     ax[0].set_xlim(0, 300)
     ax[0].set_ylim(-1.5, 1.5)
 
-    ax[1].plot(rnn, 'g--')
-    ax[1].plot(rn, 'r--')
-    ax[1].plot(rn_noise, 'b--')
+    ax[1].plot(rnn, 'b--')
+    # ax[1].plot(rn, 'r--')
+    # ax[1].plot(rn_noise, 'g--')
     ax[1].set_xlim(0, 300)
 
-    ax[2].plot(permn)
+    ax[2].plot(np.sort(permn))
 
-    # sampen.append(sampentropy(rn[1:100], 2, 0.2 * np.std(rn)))
-    sampen.append(np.var(rn))
-    sampendiff = (sampen[-2] - sampen[-1]) / sampen[-2]
-    print("Variance perc change: Run %d = %f" % (ri, sampendiff))
-
-    # end for
+    sampen.append(enlog)
+    sampendiff = (sampen[-2] - sampen[-1]) / sampen[0]
+    print("Variance perc change: Run %d = %f" % (ri, enlog))
 
 
 plt.show()
 
-# ax = plt.subplots()
-# ax = plt.hist(permn)
-
-# ax = plt.subplots()
-# plt.plot(sigmean)
-# plt.plot(z)
 
 
 
